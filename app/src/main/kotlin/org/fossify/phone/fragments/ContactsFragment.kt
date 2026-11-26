@@ -131,7 +131,7 @@ class ContactsFragment(context: Context, attributeSet: AttributeSet) : MyViewPag
                         activity?.handleGenericContactClick(it as Contact)
                     },
                     profileIconClick = {
-                        activity?.startContactDetailsIntent(it as Contact)
+                        (activity as? MainActivity)?.showContactRingtone(it as Contact)
                     }
                 ).apply {
                     binding.fragmentList.adapter = this

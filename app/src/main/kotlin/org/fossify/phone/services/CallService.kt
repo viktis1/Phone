@@ -19,6 +19,7 @@ import org.greenrobot.eventbus.EventBus
 
 class CallService : InCallService() {
     private val callNotificationManager by lazy { CallNotificationManager(this) }
+    private val ringtoneCalls by lazy { org.fossify.phone.ringtones.TelecomCallTracker(this) }
 
     private val callListener = object : Call.Callback() {
         override fun onStateChanged(call: Call, state: Int) {
@@ -34,6 +35,7 @@ class CallService : InCallService() {
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)
         CallManager.onCallAdded(call)
+        ringtoneCalls.onCallAdded(call)
         CallManager.inCallService = this
         call.registerCallback(callListener)
 
@@ -68,6 +70,7 @@ class CallService : InCallService() {
     override fun onCallRemoved(call: Call) {
         super.onCallRemoved(call)
         call.unregisterCallback(callListener)
+        ringtoneCalls.onCallRemoved(call)
         val wasPrimaryCall = call == CallManager.getPrimaryCall()
         CallManager.onCallRemoved(call)
         if (CallManager.getPhoneState() == NoCall) {
@@ -91,6 +94,7 @@ class CallService : InCallService() {
     }
 
     override fun onDestroy() {
+        ringtoneCalls.close()
         super.onDestroy()
         callNotificationManager.cancelNotification()
     }

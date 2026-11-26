@@ -43,6 +43,9 @@ import org.fossify.phone.fragments.RecentsFragment
 import org.fossify.phone.helpers.OPEN_DIAL_PAD_AT_LAUNCH
 import org.fossify.phone.helpers.RecentsHelper
 import org.fossify.phone.helpers.tabsList
+import org.fossify.phone.helpers.TAB_RINGTONES
+import org.fossify.phone.fragments.RingtonesFragment
+import org.fossify.phone.ringtones.RingtoneController
 import org.fossify.phone.models.Events
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
@@ -58,9 +61,13 @@ class MainActivity : SimpleActivity() {
     private var storedFontSize = 0
     private var storedStartNameWithSurname = false
     var cachedContacts = ArrayList<Contact>()
+    internal lateinit var ringtones: RingtoneController
+        private set
+    private val visibleTabs get() = tabsList.filter { config.showTabs and it != 0 }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ringtones = RingtoneController(this, savedInstanceState)
         setContentView(binding.root)
         appLaunched(BuildConfig.APPLICATION_ID)
         setupOptionsMenu()
@@ -172,6 +179,7 @@ class MainActivity : SimpleActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(OPEN_DIAL_PAD_AT_LAUNCH, launchedDialer)
+        ringtones.saveState(outState)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -195,10 +203,12 @@ class MainActivity : SimpleActivity() {
 
     private fun refreshMenuItems() {
         val currentFragment = getCurrentFragment()
+        binding.mainDialpadButton.beVisibleIf(currentFragment !is RingtonesFragment)
         binding.mainMenu.requireToolbar().menu.apply {
             findItem(R.id.clear_call_history).isVisible = currentFragment == getRecentsFragment()
-            findItem(R.id.sort).isVisible = currentFragment != getRecentsFragment()
-            findItem(R.id.filter).isVisible = currentFragment != getRecentsFragment()
+            val isContactTab = currentFragment is ContactsFragment || currentFragment is FavoritesFragment
+            findItem(R.id.sort).isVisible = isContactTab
+            findItem(R.id.filter).isVisible = isContactTab
             findItem(R.id.create_new_contact).isVisible = currentFragment == getContactsFragment()
             findItem(R.id.change_view_type).isVisible = currentFragment == getFavoritesFragment()
             findItem(R.id.column_count).isVisible = currentFragment == getFavoritesFragment() && config.viewType == VIEW_TYPE_GRID
@@ -346,6 +356,7 @@ class MainActivity : SimpleActivity() {
             icons.add(R.drawable.ic_clock_filled_vector)
         }
 
+        if (showTabs and TAB_RINGTONES != 0) icons.add(R.drawable.ic_ringtones_vector)
         return icons
     }
 
@@ -365,17 +376,19 @@ class MainActivity : SimpleActivity() {
             icons.add(R.drawable.ic_clock_vector)
         }
 
+        if (showTabs and TAB_RINGTONES != 0) icons.add(R.drawable.ic_ringtones_vector)
         return icons
     }
 
     private fun initFragments() {
-        binding.viewPager.offscreenPageLimit = 2
+        binding.viewPager.offscreenPageLimit = 3
         binding.viewPager.addOnPageChangeListener(object : ViewPager.OnPageChangeListener {
             override fun onPageScrollStateChanged(state: Int) {}
 
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {}
 
             override fun onPageSelected(position: Int) {
+                ringtones.onPageChanged(visibleTabs.getOrNull(position) == TAB_RINGTONES)
                 binding.mainTabsHolder.getTabAt(position)?.select()
                 getAllFragments().forEach {
                     it?.finishActMode()
@@ -391,7 +404,7 @@ class MainActivity : SimpleActivity() {
 
                 // open the Recents tab if we got here by clicking a missed call notification
                 if (intent.action == Intent.ACTION_VIEW && config.showTabs and TAB_CALL_HISTORY > 0) {
-                    wantedTab = binding.mainTabsHolder.tabCount - 1
+                    wantedTab = visibleTabs.indexOf(TAB_CALL_HISTORY).coerceAtLeast(0)
                 }
 
                 binding.mainTabsHolder.getTabAt(wantedTab)?.select()
@@ -436,8 +449,7 @@ class MainActivity : SimpleActivity() {
                 binding.viewPager.currentItem = it.position
                 updateBottomTabItemColors(it.customView, true, getSelectedTabDrawableIds()[it.position])
 
-                val lastPosition = binding.mainTabsHolder.tabCount - 1
-                if (it.position == lastPosition && config.showTabs and TAB_CALL_HISTORY > 0) {
+                if (visibleTabs.getOrNull(it.position) == TAB_CALL_HISTORY) {
                     clearMissedCalls()
                 }
             }
@@ -452,7 +464,8 @@ class MainActivity : SimpleActivity() {
         val drawableId = when (position) {
             0 -> R.drawable.ic_person_vector
             1 -> R.drawable.ic_star_vector
-            else -> R.drawable.ic_clock_vector
+            2 -> R.drawable.ic_clock_vector
+            else -> R.drawable.ic_ringtones_vector
         }
 
         return resources.getColoredDrawableWithColor(drawableId, getProperTextColor())
@@ -462,7 +475,8 @@ class MainActivity : SimpleActivity() {
         val stringId = when (position) {
             0 -> R.string.contacts_tab
             1 -> R.string.favorites_tab
-            else -> R.string.call_history_tab
+            2 -> R.string.call_history_tab
+            else -> R.string.ringtones_tab
         }
 
         return resources.getString(stringId)
@@ -515,6 +529,7 @@ class MainActivity : SimpleActivity() {
             fragments.add(getRecentsFragment())
         }
 
+        if (showTabs and TAB_RINGTONES > 0) fragments.add(getRingtonesFragment())
         return fragments
     }
 
@@ -526,32 +541,27 @@ class MainActivity : SimpleActivity() {
 
     private fun getRecentsFragment(): RecentsFragment? = findViewById(R.id.recents_fragment)
 
+    private fun getRingtonesFragment(): RingtonesFragment? = findViewById(R.id.ringtones_fragment)
+
     private fun getDefaultTab(): Int {
-        val showTabsMask = config.showTabs
-        return when (config.defaultTab) {
-            TAB_LAST_USED -> if (config.lastUsedViewPagerPage < binding.mainTabsHolder.tabCount) config.lastUsedViewPagerPage else 0
-            TAB_CONTACTS -> 0
-            TAB_FAVORITES -> if (showTabsMask and TAB_CONTACTS > 0) 1 else 0
-            else -> {
-                if (showTabsMask and TAB_CALL_HISTORY > 0) {
-                    if (showTabsMask and TAB_CONTACTS > 0) {
-                        if (showTabsMask and TAB_FAVORITES > 0) {
-                            2
-                        } else {
-                            1
-                        }
-                    } else {
-                        if (showTabsMask and TAB_FAVORITES > 0) {
-                            1
-                        } else {
-                            0
-                        }
-                    }
-                } else {
-                    0
-                }
-            }
+        if (config.defaultTab == TAB_LAST_USED) {
+            return config.lastUsedViewPagerPage.takeIf { it in visibleTabs.indices } ?: 0
         }
+        return visibleTabs.indexOf(config.defaultTab).coerceAtLeast(0)
+    }
+
+    fun showRingtones() {
+        hideKeyboard()
+        binding.mainMenu.closeSearch()
+        visibleTabs.indexOf(TAB_RINGTONES).takeIf { it >= 0 }?.let {
+            binding.mainTabsHolder.getTabAt(it)?.select()
+        }
+    }
+
+    fun showContactRingtone(contact: Contact) {
+        val uri = android.content.ContentUris.withAppendedId(
+            android.provider.ContactsContract.Contacts.CONTENT_URI, contact.contactId.toLong())
+        ringtones.showContact(uri)
     }
 
     private fun launchSettings() {

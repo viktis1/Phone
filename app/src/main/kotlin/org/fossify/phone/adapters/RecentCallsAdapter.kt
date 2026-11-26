@@ -113,6 +113,7 @@ class RecentCallsAdapter(
             findItem(R.id.cab_add_number).isVisible = isOneItemSelected
             findItem(R.id.cab_copy_number).isVisible = isOneItemSelected
             findItem(R.id.cab_show_call_details).isVisible = isOneItemSelected
+            findItem(R.id.cab_ringtone_tools).isVisible = isOneItemSelected && findContactByCall(selectedItems.first()) != null
             findItem(R.id.cab_view_details).isVisible = isOneItemSelected && findContactByCall(selectedItems.first()) != null
         }
     }
@@ -133,6 +134,10 @@ class RecentCallsAdapter(
             R.id.cab_copy_number -> copyNumber()
             R.id.cab_remove -> askConfirmRemove()
             R.id.cab_select_all -> selectAll()
+            R.id.cab_ringtone_tools -> {
+                findContactByCall(getSelectedItems().first())?.let { (activity as? MainActivity)?.showContactRingtone(it) }
+                finishActMode()
+            }
             R.id.cab_view_details -> launchContactDetailsIntent(findContactByCall(getSelectedItems().first()))
         }
     }
@@ -363,6 +368,7 @@ class RecentCallsAdapter(
                 findItem(R.id.cab_call_sim_1).isVisible = areMultipleSIMsAvailable && !call.isUnknownNumber
                 findItem(R.id.cab_call_sim_2).isVisible = areMultipleSIMsAvailable && !call.isUnknownNumber
                 findItem(R.id.cab_send_sms).isVisible = !call.isUnknownNumber
+                findItem(R.id.cab_ringtone_tools).isVisible = contact != null && !call.isUnknownNumber
                 findItem(R.id.cab_view_details).isVisible = contact != null && !call.isUnknownNumber
                 findItem(R.id.cab_add_number).isVisible = !call.isUnknownNumber
                 findItem(R.id.cab_copy_number).isVisible = !call.isUnknownNumber
@@ -397,6 +403,10 @@ class RecentCallsAdapter(
                         executeItemMenuOperation(callId) {
                             sendSMS()
                         }
+                    }
+
+                    R.id.cab_ringtone_tools -> {
+                        contact?.let { (activity as? MainActivity)?.showContactRingtone(it) }
                     }
 
                     R.id.cab_view_details -> {

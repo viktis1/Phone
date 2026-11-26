@@ -97,7 +97,7 @@ class Config(context: Context) : BaseConfig(context) {
     }
 
     var showTabs: Int
-        get() = prefs.getInt(SHOW_TABS, ALL_TABS_MASK)
+        get() = prefs.getInt(SHOW_TABS, ALL_TABS_MASK) or TAB_RINGTONES
         set(showTabs) = prefs.edit().putInt(SHOW_TABS, showTabs).apply()
 
     var groupSubsequentCalls: Boolean

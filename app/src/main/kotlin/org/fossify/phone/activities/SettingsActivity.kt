@@ -34,6 +34,7 @@ import org.fossify.commons.helpers.isQPlus
 import org.fossify.commons.helpers.isTiramisuPlus
 import org.fossify.commons.models.RadioItem
 import org.fossify.phone.R
+import org.fossify.phone.helpers.TAB_RINGTONES
 import org.fossify.phone.databinding.ActivitySettingsBinding
 import org.fossify.phone.dialogs.ExportCallHistoryDialog
 import org.fossify.phone.dialogs.ManageVisibleTabsDialog
@@ -235,6 +236,7 @@ class SettingsActivity : SimpleActivity() {
                 RadioItem(TAB_CONTACTS, getString(R.string.contacts_tab)),
                 RadioItem(TAB_FAVORITES, getString(R.string.favorites_tab)),
                 RadioItem(TAB_CALL_HISTORY, getString(R.string.call_history_tab)),
+                RadioItem(TAB_RINGTONES, getString(R.string.ringtones_tab)),
                 RadioItem(TAB_LAST_USED, getString(R.string.last_used_tab))
             )
 
@@ -250,6 +252,7 @@ class SettingsActivity : SimpleActivity() {
             TAB_CONTACTS -> R.string.contacts_tab
             TAB_FAVORITES -> R.string.favorites_tab
             TAB_CALL_HISTORY -> R.string.call_history_tab
+            TAB_RINGTONES -> R.string.ringtones_tab
             else -> R.string.last_used_tab
         }
     )

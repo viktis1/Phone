@@ -16,3 +16,8 @@ dependencyResolutionManagement {
     }
 }
 include(":app")
+includeBuild("Commons") {
+    dependencySubstitution {
+        substitute(module("org.fossify:commons")).using(project(":commons"))
+    }
+}

@@ -24,6 +24,7 @@ import org.fossify.commons.views.MyGridLayoutManager
 import org.fossify.commons.views.MyLinearLayoutManager
 import org.fossify.phone.R
 import org.fossify.phone.activities.SimpleActivity
+import org.fossify.phone.activities.MainActivity
 import org.fossify.phone.adapters.ContactsAdapter
 import org.fossify.phone.databinding.FragmentFavoritesBinding
 import org.fossify.phone.databinding.FragmentLettersLayoutBinding
@@ -130,7 +131,7 @@ class FavoritesFragment(context: Context, attributeSet: AttributeSet) : MyViewPa
                     activity?.handleGenericContactClick(it as Contact)
                 },
                 profileIconClick = {
-                    activity?.startContactDetailsIntent(it as Contact)
+                    (activity as? MainActivity)?.showContactRingtone(it as Contact)
                 }).apply {
                 binding.fragmentList.adapter = this
 

@@ -4,6 +4,11 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="AppCompatResource,AlwaysShowAction">
     <item
+        android:id="@+id/cab_ringtone_tools"
+        android:icon="@drawable/ic_ringtones_vector"
+        android:title="@string/contact_ringtone_tools"
+        app:showAsAction="ifRoom" />
+    <item
         android:id="@+id/cab_call_sim_1"
         android:icon="@drawable/ic_phone_one_vector"
         android:title="@string/call_from_sim_1"

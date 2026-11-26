@@ -29,6 +29,7 @@ import org.fossify.commons.models.contacts.Contact
 import org.fossify.commons.views.MyRecyclerView
 import org.fossify.phone.R
 import org.fossify.phone.activities.SimpleActivity
+import org.fossify.phone.activities.MainActivity
 import org.fossify.phone.extensions.areMultipleSIMsAvailable
 import org.fossify.phone.extensions.callContactWithSim
 import org.fossify.phone.extensions.config
@@ -93,6 +94,7 @@ class ContactsAdapter(
             findItem(R.id.cab_delete).isVisible = showDeleteButton
             findItem(R.id.cab_create_shortcut).title = activity.getString(R.string.create_shortcut)
             findItem(R.id.cab_create_shortcut).isVisible = isOneItemSelected && isOreoPlus()
+            findItem(R.id.cab_ringtone_tools).isVisible = isOneItemSelected && activity is MainActivity
             findItem(R.id.cab_view_details).isVisible = isOneItemSelected
             findItem(R.id.cab_block_unblock_contact).isVisible = isOneItemSelected && isNougatPlus()
             getCabBlockContactTitle { title ->
@@ -113,6 +115,10 @@ class ContactsAdapter(
             R.id.cab_remove_default_sim -> removeDefaultSIM()
             R.id.cab_delete -> askConfirmDelete()
             R.id.cab_send_sms -> sendSMS()
+            R.id.cab_ringtone_tools -> {
+                getSelectedItems().firstOrNull()?.let { (activity as? MainActivity)?.showContactRingtone(it) }
+                finishActMode()
+            }
             R.id.cab_view_details -> viewContactDetails()
             R.id.cab_create_shortcut -> createShortcut()
             R.id.cab_select_all -> selectAll()
@@ -353,6 +359,7 @@ class ContactsAdapter(
             itemContactFrame.isSelected = selectedKeys.contains(contact.rawId)
 
             itemContactImage.apply {
+                if (activity is MainActivity) contentDescription = "Ringtone and voice for ${contact.getNameToDisplay()}"
                 if (profileIconClick != null && viewType != VIEW_TYPE_GRID) {
                     setBackgroundResource(R.drawable.selector_clickable_circle)
 
