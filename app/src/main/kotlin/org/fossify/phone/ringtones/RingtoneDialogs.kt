@@ -1,27 +1,22 @@
 package org.fossify.phone.ringtones
 
-import android.graphics.drawable.GradientDrawable
-import android.view.View
-import android.view.ViewGroup
-import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
-import org.fossify.commons.extensions.getProperBackgroundColor
+import org.fossify.commons.extensions.baseConfig
+import org.fossify.commons.extensions.getColoredDrawableWithColor
 import org.fossify.commons.extensions.getProperPrimaryColor
-import org.fossify.commons.extensions.getProperTextColor
+import org.fossify.commons.extensions.isBlackAndWhiteTheme
+import org.fossify.commons.extensions.isDynamicTheme
 
-/** Match the custom colours used by Fossify's dialogs in every ringtone flow. */
+/** Use the same backgrounds, fonts and custom palette as Phone's other dialogs. */
 internal fun AlertDialog.showPhoneDialog(): AlertDialog = apply {
     show()
-    val colour = context.getProperTextColor()
-    fun style(view: View) {
-        if (view is TextView) view.setTextColor(colour)
-        if (view is ViewGroup) for (index in 0 until view.childCount) style(view.getChildAt(index))
+    window?.decorView?.let { context.applyRingtoneTheme(it) }
+    val background = when {
+        context.isBlackAndWhiteTheme() -> androidx.core.content.ContextCompat.getDrawable(context, org.fossify.commons.R.drawable.black_dialog_background)
+        context.isDynamicTheme() -> androidx.core.content.ContextCompat.getDrawable(context, org.fossify.commons.R.drawable.dialog_you_background)
+        else -> context.resources.getColoredDrawableWithColor(org.fossify.commons.R.drawable.dialog_bg, context.baseConfig.backgroundColor)
     }
-    window?.decorView?.let(::style)
-    window?.setBackgroundDrawable(GradientDrawable().apply {
-        cornerRadius = context.dp(16).toFloat()
-        setColor(context.getProperBackgroundColor())
-    })
+    window?.setBackgroundDrawable(background)
     listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL).forEach {
         getButton(it)?.setTextColor(context.getProperPrimaryColor())
     }

@@ -13,7 +13,6 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
@@ -38,6 +37,9 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.fossify.phone.R
 import org.fossify.phone.activities.MainActivity
+import org.fossify.phone.databinding.ContentRingtonesBinding
+import org.fossify.commons.extensions.getProperBackgroundColor
+import org.fossify.commons.extensions.getAlertDialogBuilder
 import java.io.File
 import java.lang.ref.WeakReference
 
@@ -49,6 +51,7 @@ class RingtoneController(val host: MainActivity, savedState: Bundle?) :
     internal val model = ViewModelProvider(host)[RingtoneViewModel::class.java]
     internal val audio = AudioPreview(host, { model.status.value = it }, { contactDialog?.refresh() })
     private lateinit var content: LinearLayout
+    private var rootView: View? = null
     private var signInButton: Button? = null
     private var navigation: TabLayout? = null
     private var section = savedState?.getInt("ringtoneSection", R.id.section_voices) ?: R.id.section_voices
@@ -80,7 +83,7 @@ class RingtoneController(val host: MainActivity, savedState: Bundle?) :
         else {
             model.status.value = "Access was denied. Your ringtones are still saved."
             if (permission != null && !host.shouldShowRequestPermissionRationale(permission)) {
-                AlertDialog.Builder(host).setMessage("You can enable access in app settings.")
+                host.getAlertDialogBuilder().setMessage("You can enable access in app settings.")
                     .setPositiveButton("Settings") { _, _ ->
                         startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
                     }.setNegativeButton("Later", null).showPhoneDialog()
@@ -104,11 +107,12 @@ class RingtoneController(val host: MainActivity, savedState: Bundle?) :
     }
 
     fun createView(): View {
-        val root = column()
-        val heading = column(12)
-        signInButton = secondaryButton("", ::signIn).also { heading.addView(it) }
-        root.addView(heading)
-        navigation = TabLayout(host).apply {
+        val binding = ContentRingtonesBinding.inflate(host.layoutInflater)
+        val root = binding.root
+        rootView = root
+        signInButton = binding.account.apply { setOnClickListener { signIn() } }
+        content = binding.content
+        navigation = binding.navigation.apply {
             addTab(newTab().setText(R.string.ringtone_generate))
             addTab(newTab().setText(R.string.ringtone_history))
             addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
@@ -119,18 +123,16 @@ class RingtoneController(val host: MainActivity, savedState: Bundle?) :
                 override fun onTabReselected(tab: TabLayout.Tab) = Unit
             })
         }
-        root.addView(navigation)
-        content = column()
-        root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
         navigation?.getTabAt(if (section == R.id.section_ringtones) 1 else 0)?.select()
         showSection(section)
         updateAccount()
+        updateColors()
         return root
     }
 
     private fun updateAccount() {
         val user = auth.currentUser
-        signInButton?.text = if (user == null) "Sign in with Google for ringtones" else user.email ?: "Google account connected"
+        signInButton?.text = if (user == null) getString(R.string.ringtone_sign_in) else user.email ?: getString(R.string.ringtone_connected)
         signInButton?.isEnabled = true
     }
 
@@ -149,6 +151,7 @@ class RingtoneController(val host: MainActivity, savedState: Bundle?) :
         currentScreen = if (value == R.id.section_ringtones) historyTab else generateTab
         content.removeAllViews()
         content.addView(currentScreen!!.create(), LinearLayout.LayoutParams(-1, -1))
+        applyRingtoneTheme(content)
         if (value == R.id.section_voices) model.retryVoiceRefresh()
     }
 
@@ -210,7 +213,7 @@ class RingtoneController(val host: MainActivity, savedState: Bundle?) :
                 Manifest.permission.RECORD_AUDIO -> "Microphone access is used only while recording a voice sample."
                 else -> "Storage access is needed on this Android version to publish the ringtone."
             }
-            AlertDialog.Builder(this).setMessage(reason).setPositiveButton("Continue") { _, _ -> launch() }
+            host.getAlertDialogBuilder().setMessage(reason).setPositiveButton("Continue") { _, _ -> launch() }
                 .setNegativeButton("Cancel", null).showPhoneDialog()
         } else launch()
     }
@@ -244,7 +247,7 @@ class RingtoneController(val host: MainActivity, savedState: Bundle?) :
 
     private fun signIn() {
         if (auth.currentUser != null) {
-            AlertDialog.Builder(this).setTitle("Google account").setMessage(auth.currentUser?.email)
+            host.getAlertDialogBuilder().setTitle("Google account").setMessage(auth.currentUser?.email)
                 .setPositiveButton("Sign out") { _, _ ->
                     stopAudio()
                     auth.signOut()
@@ -288,6 +291,14 @@ class RingtoneController(val host: MainActivity, savedState: Bundle?) :
         }
         statusViews.add(WeakReference(status))
         header.addView(status)
+    }
+
+    fun updateColors() {
+        rootView?.let {
+            it.setBackgroundColor(getProperBackgroundColor())
+            applyRingtoneTheme(it)
+        }
+        currentScreen?.refresh?.invoke()
     }
 
     fun onPageChanged(visible: Boolean) {

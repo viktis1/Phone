@@ -12,7 +12,11 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.widget.doOnTextChanged
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.color.MaterialColors
+import androidx.core.graphics.ColorUtils
+import org.fossify.commons.extensions.getProperBackgroundColor
+import org.fossify.commons.extensions.getProperPrimaryColor
+import org.fossify.commons.extensions.getAlertDialogBuilder
+import org.fossify.phone.databinding.ContentRingtoneGenerateBinding
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -21,9 +25,9 @@ import java.io.File
 
 /** Choose a recipient and reference clip, preview it, and submit generation. */
 internal class GenerateScreen(activity: RingtoneController, var voiceQuery: String = "") : TabScreen(activity) {
-    private lateinit var recipientButton: Button
-    private lateinit var voiceButton: Button
-    private lateinit var languageButton: Button
+    private lateinit var recipientButton: TextView
+    private lateinit var voiceButton: TextView
+    private lateinit var languageButton: TextView
     private lateinit var next: Button
     private data class VoiceRow(val title: String, val voice: Voice? = null)
 
@@ -31,14 +35,14 @@ internal class GenerateScreen(activity: RingtoneController, var voiceQuery: Stri
         val draft = model.draft.value ?: RingtoneDraft()
         val voice = model.availableVoices.firstOrNull { it.id == draft.voiceId }
         val clip = voice?.clips?.firstOrNull { it.id == draft.clipId }
-        recipientButton.text = if (draft.contactUri.isBlank()) "Choose / change recipient"
-            else "✓  Recipient: ${draft.contactName}\nTap to change"
+        recipientButton.text = if (draft.contactUri.isBlank()) getString(org.fossify.phone.R.string.ringtone_choose_recipient)
+            else getString(org.fossify.phone.R.string.ringtone_recipient, draft.contactName)
         voiceButton.text = when {
-            voice == null -> "Choose a voice"
-            clip == null -> "Voice: ${voice.displayName}\nChoose a clip"
-            else -> "✓  Voice: ${voice.displayName}\n${clip.name.substringAfterLast('/')} · Tap to change"
+            voice == null -> getString(org.fossify.phone.R.string.ringtone_choose_voice)
+            clip == null -> getString(org.fossify.phone.R.string.ringtone_voice, voice.displayName)
+            else -> getString(org.fossify.phone.R.string.ringtone_voice_clip, voice.displayName, clip.name.substringAfterLast('/'))
         }
-        languageButton.text = "Language: ${languageName(draft.language)}"
+        languageButton.text = getString(org.fossify.phone.R.string.ringtone_language, languageName(draft.language))
         languageButton.isEnabled = model.loaded.value == true
         next.isEnabled = model.loaded.value == true && model.saving.value != true &&
             model.recording.value != true && draft.contactUri.isNotBlank() && clip != null
@@ -57,29 +61,29 @@ internal class GenerateScreen(activity: RingtoneController, var voiceQuery: Stri
     }
 
     override fun create(): View {
-        val body = column(16)
+        val binding = ContentRingtoneGenerateBinding.inflate(activity.host.layoutInflater)
         val error = voiceRefreshBanner()
-        body.addView(error.row)
-        body.addView(text("Generate", 22))
-        activity.statusHeader(body)
-        recipientButton = secondaryButton("Choose / change recipient") { chooseGenerationContact() }
-        voiceButton = secondaryButton("Choose a voice") { chooseVoice() }
-        body.addView(recipientButton)
-        body.addView(voiceButton)
-        languageButton = secondaryButton("Language: Automatic") { chooseLanguage() }
-        body.addView(languageButton)
-        next = button("Generate & set ringtone") { nextStep() }
-        body.addView(next)
+        binding.feedback.addView(error.row)
+        activity.statusHeader(binding.feedback)
+        recipientButton = binding.recipient.apply { setOnClickListener { chooseGenerationContact() } }
+        voiceButton = binding.voice.apply { setOnClickListener { chooseVoice() } }
+        languageButton = binding.language.apply { setOnClickListener { chooseLanguage() } }
+        listOf(recipientButton, voiceButton, languageButton).forEach { it.tag = RINGTONE_SETTING_ROW }
+        next = binding.generate.apply {
+            tag = RINGTONE_PRIMARY_ACTION
+            setOnClickListener { nextStep() }
+        }
         refresh = { updateVoiceRefreshBanner(error); updateSummary() }
         refresh()
-        return android.widget.ScrollView(this).apply { addView(body) }
+        applyRingtoneTheme(binding.root)
+        return binding.root
     }
 
     private data class VoiceRefreshBanner(val row: LinearLayout, val message: TextView, val retry: Button)
 
     private fun voiceRefreshBanner(): VoiceRefreshBanner {
         val message = text("", 14).apply {
-            setTextColor(MaterialColors.getColor(this, androidx.appcompat.R.attr.colorError))
+            tag = RINGTONE_ERROR_TEXT
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         val retry = secondaryButton("Refresh") { model.retryVoiceRefresh() }
@@ -101,7 +105,7 @@ internal class GenerateScreen(activity: RingtoneController, var voiceQuery: Stri
     }
 
     private fun languageName(code: String): String = if (code == "auto") "Automatic (voice language)"
-        else java.util.Locale.forLanguageTag(code).getDisplayLanguage(java.util.Locale.ENGLISH)
+        else java.util.Locale.forLanguageTag(code).getDisplayLanguage(java.util.Locale.getDefault())
 
     private fun chooseLanguage() {
         val list = ListView(this)
@@ -118,7 +122,7 @@ internal class GenerateScreen(activity: RingtoneController, var voiceQuery: Stri
             .sortedBy { languageName(it) }
         val adapter = RowsAdapter<String> { code ->
             text((if (code == model.draft.value?.language) "✓  " else "") + languageName(code), 17)
-                .apply { setPadding(24, 24, 24, 24) }
+                .apply { val margin = resources.getDimensionPixelSize(org.fossify.phone.R.dimen.activity_margin); setPadding(margin, margin, margin, margin) }
         }
         list.adapter = adapter
         val empty = text("No languages match your search.", 14)
@@ -134,7 +138,7 @@ internal class GenerateScreen(activity: RingtoneController, var voiceQuery: Stri
             empty.visibility = if (adapter.items.isEmpty()) View.VISIBLE else View.GONE
         }
         search.doOnTextChanged { value, _, _, _ -> filter(value.toString()) }
-        val dialog = AlertDialog.Builder(this).setTitle("Choose a language")
+        val dialog = activity.host.getAlertDialogBuilder().setTitle("Choose a language")
             .setView(body).setNegativeButton("Cancel", null).create()
         list.setOnItemClickListener { _, _, position, _ ->
             adapter.items.getOrNull(position)?.let {
@@ -178,9 +182,7 @@ internal class GenerateScreen(activity: RingtoneController, var voiceQuery: Stri
                 if (voice != null) addView(text(
                     if (voice.clips.size == 1) "1 clip · Tap to choose"
                     else "${voice.clips.size} clips · Tap to choose", 14))
-                if (chosen) setBackgroundColor(MaterialColors.layer(
-                    MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurface),
-                    MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary), 0.12f))
+                if (chosen) setBackgroundColor(ColorUtils.blendARGB(getProperBackgroundColor(), getProperPrimaryColor(), 0.12f))
             }
         }
         list.adapter = adapter
@@ -209,7 +211,7 @@ internal class GenerateScreen(activity: RingtoneController, var voiceQuery: Stri
                 else -> "Choose a voice below to see its clips."
             }
         }
-        val dialog = AlertDialog.Builder(this).setTitle("Choose a voice")
+        val dialog = activity.host.getAlertDialogBuilder().setTitle("Choose a voice")
             .setView(list).setPositiveButton("Done", null).create()
         dialog.observeUntilDismissed(activity, model.voices, model.draft,
             model.voiceRefreshError, model.refreshingVoices, onDismiss = { activity.stopAudio() }) { refreshPicker() }
@@ -225,7 +227,7 @@ internal class GenerateScreen(activity: RingtoneController, var voiceQuery: Stri
             return
         }
         val selected = voice.clips.indexOfFirst { it.id == model.draft.value?.clipId }
-        val dialog = AlertDialog.Builder(this)
+        val dialog = activity.host.getAlertDialogBuilder()
             .setTitle("${voice.displayName} · ${voice.category}")
             .setSingleChoiceItems(voice.clips.map { it.name.substringAfterLast('/') }.toTypedArray(), selected) { chooser, index ->
                 activity.stopAudio()

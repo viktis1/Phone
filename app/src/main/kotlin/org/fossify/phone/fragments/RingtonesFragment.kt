@@ -18,7 +18,9 @@ class RingtonesFragment(context: Context, attrs: AttributeSet) :
         addView(controller.createView(), RelativeLayout.LayoutParams(-1, -1))
     }
 
-    override fun setupColors(textColor: Int, primaryColor: Int, properPrimaryColor: Int) = Unit
+    override fun setupColors(textColor: Int, primaryColor: Int, properPrimaryColor: Int) {
+        (activity as? MainActivity)?.ringtones?.updateColors()
+    }
     override fun onSearchClosed() = Unit
     override fun onSearchQueryChanged(text: String) {
         (activity as? MainActivity)?.ringtones?.search(text)

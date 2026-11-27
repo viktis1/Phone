@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+    <LinearLayout
+        android:id="@+id/body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/activity_margin">
+        <LinearLayout
+            android:id="@+id/feedback"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+        <org.fossify.commons.views.MyTextView
+            android:id="@+id/recipient"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/two_line_list_item_min_height"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="start|center_vertical"
+            android:paddingVertical="@dimen/medium_margin"
+            android:textSize="@dimen/list_primary_text_size"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:text="@string/ringtone_choose_recipient" />
+        <include layout="@layout/divider" />
+        <org.fossify.commons.views.MyTextView
+            android:id="@+id/voice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/two_line_list_item_min_height"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="start|center_vertical"
+            android:paddingVertical="@dimen/medium_margin"
+            android:textSize="@dimen/list_primary_text_size"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:text="@string/ringtone_choose_voice" />
+        <include layout="@layout/divider" />
+        <org.fossify.commons.views.MyTextView
+            android:id="@+id/language"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/two_line_list_item_min_height"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="start|center_vertical"
+            android:paddingVertical="@dimen/medium_margin"
+            android:textSize="@dimen/list_primary_text_size"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:text="@string/ringtone_choose_language" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/generate"
+
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/list_touch_target_min"
+            android:gravity="center"
+            android:text="@string/ringtone_generate_and_assign"
+            android:textAllCaps="false" />
+    </LinearLayout>
+</ScrollView>

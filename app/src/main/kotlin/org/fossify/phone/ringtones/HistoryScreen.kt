@@ -3,7 +3,6 @@ package org.fossify.phone.ringtones
 import org.fossify.phone.R
 
 import android.Manifest
-import android.content.res.Configuration
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -13,17 +12,18 @@ import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.ProgressBar
 import android.widget.ScrollView
-import androidx.appcompat.app.AlertDialog
 import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.color.MaterialColors
+import org.fossify.commons.extensions.getProperTextColor
+import org.fossify.commons.extensions.getProperPrimaryColor
+import org.fossify.commons.extensions.getAlertDialogBuilder
+import org.fossify.phone.databinding.ContentRingtoneHistoryBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
-import com.google.android.material.R.attr as MaterialAttr
 
 private const val HISTORY_PREVIEW_LIMIT = 3
 
@@ -31,42 +31,38 @@ private const val HISTORY_PREVIEW_LIMIT = 3
 internal class HistoryScreen(activity: RingtoneController) : TabScreen(activity) {
     var query: String = ""
     override fun create(): View {
-        val body = column(16).apply {
-            addView(text("History", 26))
-            addView(text("Recent calls and ringtone activity, at a glance.", 14))
-            activity.statusHeader(this)
-        }
-        val sections = column()
-        body.addView(sections)
+        val binding = ContentRingtoneHistoryBinding.inflate(activity.host.layoutInflater)
+        val sections = binding.sections
         refresh = {
             val calls = model.callHistory.value.orEmpty().filter { it.caller.contains(query, true) }
             val items = model.items.value.orEmpty().filter { it.contactName.contains(query, true) || it.voiceName.contains(query, true) }
             sections.removeAllViews()
             sections.addView(previewSection(
-                "Incoming calls", "What happened after each incoming call.",
-                if (calls.isEmpty()) "No incoming calls yet."
-                else "${calls.size} calls · Latest ${minOf(HISTORY_PREVIEW_LIMIT, calls.size)} shown",
+                getString(R.string.ringtone_incoming_calls),
+                if (calls.isEmpty()) getString(R.string.ringtone_no_calls)
+                else getString(R.string.ringtone_calls_summary, calls.size, minOf(HISTORY_PREVIEW_LIMIT, calls.size)),
                 calls.take(HISTORY_PREVIEW_LIMIT).map(::callRow),
-                "View all calls (${calls.size})", ::showAllCalls,
-                if (canGenerateFromCalls()) null else secondaryButton("Enable automatic call ringtones") {
+                getString(R.string.ringtone_all_calls, calls.size), ::showAllCalls,
+                if (canGenerateFromCalls()) null else secondaryButton(getString(R.string.ringtone_enable_calls)) {
                     activity.runAction(ScreenAction.CALL_HISTORY)
                 }
             ))
             sections.addView(previewSection(
-                "Ringtones & uploads", "Generation, downloads and voice recordings.",
-                if (items.isEmpty()) "No activity yet. Create your first ringtone in Generate."
-                else "${items.size} saved · ${items.count { it.active }} in progress · ${items.count { it.stage == "failed" }} need attention",
+                getString(R.string.ringtone_activity),
+                if (items.isEmpty()) getString(R.string.ringtone_no_activity)
+                else getString(R.string.ringtone_activity_summary, items.size, items.count { it.active }, items.count { it.stage == "failed" }),
                 items.take(HISTORY_PREVIEW_LIMIT).map { item ->
                     itemRow(item, compact = true).apply {
                         isFocusable = true
                         setOnClickListener { showItem(item) }
                     }
                 },
-                "View all activity (${items.size})", ::showAllItems
+                getString(R.string.ringtone_all_activity, items.size), ::showAllItems
             ))
         }
         refresh()
-        return ScrollView(this).apply { addView(body) }
+        applyRingtoneTheme(binding.root)
+        return binding.root
     }
 
     private fun canGenerateFromCalls() = activity.isDefaultPhone() && listOfNotNull(
@@ -75,20 +71,17 @@ internal class HistoryScreen(activity: RingtoneController) : TabScreen(activity)
     ).all(activity::hasPermission)
 
     private fun previewSection(
-        title: String, subtitle: String, summary: String, rows: List<View>,
+        title: String, summary: String, rows: List<View>,
         action: String, onClick: () -> Unit, setup: View? = null
-    ) = column(16).apply {
-        val surface = MaterialColors.getColor(this, MaterialAttr.colorSurface)
-        val primary = MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary)
-        background = GradientDrawable().apply {
-            cornerRadius = dp(20).toFloat()
-            // Material 2 themes do not define the Material 3 container color.
-            setColor(MaterialColors.getColor(this@HistoryScreen, MaterialAttr.colorSurfaceContainer,
-                MaterialColors.layer(surface, primary, 0.05f)))
+    ) = column().apply {
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+            bottomMargin = resources.getDimensionPixelSize(R.dimen.activity_margin)
         }
-        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) }
-        addView(text(title, 21).apply { setTypeface(typeface, Typeface.BOLD) })
-        addView(text(subtitle, 14))
+        addView(text(title, 16).apply {
+            setTypeface(typeface, Typeface.BOLD)
+            val margin = resources.getDimensionPixelSize(R.dimen.normal_margin)
+            setPadding(0, margin, 0, margin)
+        })
         setup?.let(::addView)
         addView(text(summary, 14))
         addView(column().apply {
@@ -97,11 +90,13 @@ internal class HistoryScreen(activity: RingtoneController) : TabScreen(activity)
             rows.forEach { addView(it) }
         })
         addView(secondaryButton(action, onClick).apply { isEnabled = rows.isNotEmpty() })
+        addView(android.view.LayoutInflater.from(this@HistoryScreen).inflate(R.layout.divider, this, false))
+        applyRingtoneTheme(this)
     }
 
     private fun historyDivider() = GradientDrawable().apply {
         setColor(ColorUtils.setAlphaComponent(
-            MaterialColors.getColor(this@HistoryScreen, MaterialAttr.colorOnSurface, "History divider"), 45))
+            getProperTextColor(), 45))
         setSize(1, dp(1).coerceAtLeast(1))
     }
 
@@ -115,14 +110,12 @@ internal class HistoryScreen(activity: RingtoneController) : TabScreen(activity)
 
     private fun callRow(entry: CallHistoryEntry) = column().apply {
         setPadding(dp(8), dp(4), dp(8), 0)
-        addView(compactText(entry.caller, 17).apply { setTypeface(typeface, Typeface.BOLD) })
+        addView(compactText(entry.caller, 16))
         addView(compactText(timestamp(entry.received), 12).apply { setPadding(0, dp(1), 0, 0) })
         val queued = entry.detail.startsWith("Automatic ringtone generation queued")
-        val darkTheme = resources.configuration.uiMode and
-            Configuration.UI_MODE_NIGHT_MASK ==
-            Configuration.UI_MODE_NIGHT_YES
-        val status = if (queued) "Queued" else if (entry.detail.startsWith("Waiting")) "Preparing" else "Not queued"
-        addView(compactText("● $status  ›", 14).apply {
+        val status = getString(if (queued) R.string.ringtone_queued
+            else if (entry.detail.startsWith("Waiting")) R.string.ringtone_preparing else R.string.ringtone_not_queued)
+        addView(compactText("$status  ›", 14).apply {
             minHeight = dp(32)
             gravity = Gravity.CENTER_VERTICAL
             isFocusable = true
@@ -132,19 +125,15 @@ internal class HistoryScreen(activity: RingtoneController) : TabScreen(activity)
             setBackgroundResource(feedback.resourceId)
             setOnClickListener { showCall(entry) }
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(android.graphics.Color.parseColor(
-                if (queued) {
-                    if (darkTheme) "#81C784" else "#2E7D32"
-                } else {
-                    if (darkTheme) "#EF9A9A" else "#B71C1C"
-                }))
+            tag = RINGTONE_ACCENT_TEXT
+            setTextColor(getProperPrimaryColor())
         })
     }
 
     private fun showCall(initial: CallHistoryEntry) {
         val body = column(20)
         val scroll = ScrollView(this).apply { addView(body) }
-        val dialog = AlertDialog.Builder(this).setTitle(initial.caller).setView(scroll)
+        val dialog = activity.host.getAlertDialogBuilder().setTitle(initial.caller).setView(scroll)
             .setPositiveButton("Close", null).create()
         dialog.observeUntilDismissed(activity, model.callHistory) {
             val entry = model.callHistory.value.orEmpty().firstOrNull { it.id == initial.id } ?: initial
@@ -156,19 +145,18 @@ internal class HistoryScreen(activity: RingtoneController) : TabScreen(activity)
     }
 
     private fun itemRow(item: RingtoneItem, compact: Boolean = false) = column(8).apply {
-        addView(text(item.contactName, 17).apply { setTypeface(typeface, Typeface.BOLD) })
+        addView(text(item.contactName, 16))
         addView(text(item.voiceName + " · " + timestamp(item.created), 12))
         addView(text(item.label, 15).apply {
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(MaterialColors.getColor(
-                this, if (item.stage == "failed") androidx.appcompat.R.attr.colorError
-                else androidx.appcompat.R.attr.colorPrimary))
+            tag = RINGTONE_ACCENT_TEXT
+            setTextColor(getProperPrimaryColor())
         })
         if (item.detail.isNotBlank()) addView(text(item.detail, 14).apply {
             if (compact) { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
         })
         if (item.active) addView(ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply { isIndeterminate = true })
-        addView(text("Open details  ›", 14))
+        addView(text(getString(R.string.ringtone_open_details) + "  ›", 14))
     }
 
     private fun showAllCalls() = showHistoryList(
@@ -194,7 +182,7 @@ internal class HistoryScreen(activity: RingtoneController) : TabScreen(activity)
                 adapter.items.getOrNull(position)?.let(onClick)
             }
         }
-        val dialog = AlertDialog.Builder(this).setTitle(title).setView(list)
+        val dialog = activity.host.getAlertDialogBuilder().setTitle(title).setView(list)
             .setPositiveButton("Close", null).create()
         dialog.observeUntilDismissed(activity, source) { adapter.items = source.value.orEmpty() }
         dialog.showPhoneDialog()
@@ -203,7 +191,7 @@ internal class HistoryScreen(activity: RingtoneController) : TabScreen(activity)
     private fun showItem(initial: RingtoneItem) {
         val body = column(20)
         val scroll = ScrollView(this).apply { addView(body) }
-        val dialog = AlertDialog.Builder(this).setTitle(initial.contactName).setView(scroll)
+        val dialog = activity.host.getAlertDialogBuilder().setTitle(initial.contactName).setView(scroll)
             .setPositiveButton("Close", null).create()
         fun render(item: RingtoneItem) {
             body.removeAllViews()
