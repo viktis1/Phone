@@ -376,7 +376,7 @@ class MainActivity : SimpleActivity() {
             icons.add(R.drawable.ic_clock_vector)
         }
 
-        if (showTabs and TAB_RINGTONES != 0) icons.add(R.drawable.ic_ringtones_vector)
+        if (showTabs and TAB_RINGTONES != 0) icons.add(R.drawable.ic_ringtones_outline_vector)
         return icons
     }
 
@@ -465,7 +465,7 @@ class MainActivity : SimpleActivity() {
             0 -> R.drawable.ic_person_vector
             1 -> R.drawable.ic_star_vector
             2 -> R.drawable.ic_clock_vector
-            else -> R.drawable.ic_ringtones_vector
+            else -> R.drawable.ic_ringtones_outline_vector
         }
 
         return resources.getColoredDrawableWithColor(drawableId, getProperTextColor())

@@ -1,74 +1,166 @@
 package org.fossify.phone.ringtones
 
+import android.content.res.ColorStateList
 import android.net.Uri
-import android.widget.ScrollView
-import android.widget.Toast
+import android.view.View
 import androidx.appcompat.app.AlertDialog
+import com.google.android.material.button.MaterialButton
+import com.google.firebase.auth.FirebaseAuth
+import org.fossify.commons.dialogs.ConfirmationDialog
+import org.fossify.commons.extensions.getAlertDialogBuilder
+import org.fossify.commons.extensions.getProperPrimaryColor
+import org.fossify.commons.extensions.getProperTextColor
+import org.fossify.commons.extensions.setupDialogStuff
+import org.fossify.commons.extensions.viewBinding
 import org.fossify.phone.R
+import org.fossify.phone.databinding.DialogContactRingtoneBinding
 
 /** Contact audio tools are opened directly from Fossify contacts and favorites. */
 internal class ContactRingtoneDialog(
     private val controller: RingtoneController,
     private val contact: AddressBookContact
 ) {
+    private enum class Preview { RINGTONE, RECORDING }
+
     private val model get() = controller.model
     private val audio get() = controller.audio
-    private val body = controller.column(16)
-    private val status = controller.text("", 14)
-    private val record = controller.button("Record voice sample", ::requestRecording)
-    private val listenRingtone = controller.secondaryButton("Listen to current ringtone") {
-        controller.stopAudio()
-        audio.playContact(contact)
-    }
-    private val listenRecording = controller.secondaryButton("Listen to voice recording") {
-        controller.stopAudio()
-        val file = model.savedRecordingFile(contact)
-        if (file.isFile) audio.play(Uri.fromFile(file), "recording for ${contact.name}")
-        else model.status.value = "Record a voice sample first, or refresh your cloud voices."
-    }
-    private val upload = controller.secondaryButton("Upload voice recording") { model.uploadRecording() }
-    private val generate = controller.button("Generate ringtone for ${contact.name}") {
-        if (model.loaded.value == true) model.selectGenerationContact(contact)
-        else Toast.makeText(controller.host, "Sign in to generate a ringtone.", Toast.LENGTH_LONG).show()
-        dismiss()
-        controller.navigate(R.id.section_voices)
-    }
-    private val dialog = AlertDialog.Builder(controller.host)
-        .setTitle(contact.name)
-        .setView(ScrollView(controller.host).apply { addView(body) })
-        .setPositiveButton("Close", null)
-        .create()
+    private val binding by controller.host.viewBinding(DialogContactRingtoneBinding::inflate)
+    private var preview: Preview? = null
+    private var dialog: AlertDialog? = null
+    private var uploadId: String? = null
+    private var preparingUpload = false
+    private var uploadFailed = false
 
     init {
-        body.addView(controller.text(contact.ringtoneName, 14))
-        body.addView(status)
-        body.addView(listenRingtone)
-        body.addView(record)
-        body.addView(listenRecording)
-        body.addView(controller.secondaryButton("Stop audio") { controller.stopAudio() })
-        body.addView(upload)
-        body.addView(generate)
-        dialog.setOnDismissListener { controller.stopAudio(); model.stopRecording() }
+        binding.ringtoneName.text = contact.ringtoneName
+        binding.record.setOnClickListener { requestRecording() }
+        binding.playRingtone.setOnClickListener {
+            togglePreview(Preview.RINGTONE) { audio.playContact(contact) }
+        }
+        binding.playRecording.setOnClickListener {
+            togglePreview(Preview.RECORDING) {
+                val file = model.savedRecordingFile(contact)
+                if (file.isFile) {
+                    audio.play(Uri.fromFile(file), controller.getString(R.string.contact_audio_preview_description, contact.name))
+                } else {
+                    model.status.value = controller.getString(R.string.contact_audio_missing)
+                }
+            }
+        }
+        binding.upload.setOnClickListener {
+            val previous = model.items.value.orEmpty().firstOrNull { it.id == uploadId }
+            if (previous?.stage == "failed") {
+                model.retry(previous)
+                preparingUpload = true
+            } else {
+                preparingUpload = true
+                uploadFailed = false
+                uploadId = null
+                model.uploadRecording { id ->
+                    uploadId = id
+                    preparingUpload = false
+                    uploadFailed = id == null
+                    refresh()
+                }
+            }
+            refresh()
+        }
+    }
+
+    private fun togglePreview(target: Preview, play: () -> Unit) {
+        val stop = preview == target && audio.isActive
+        controller.stopAudio()
+        if (stop) {
+            model.status.value = controller.getString(R.string.contact_audio_stopped)
+        } else {
+            preview = target
+            play()
+        }
+        refresh()
     }
 
     fun show() {
-        refresh()
-        dialog.showPhoneDialog()
+        val builder = controller.host.getAlertDialogBuilder().setPositiveButton(R.string.ok, null)
+        controller.host.setupDialogStuff(binding.root, builder, titleText = contact.name) {
+            dialog = it
+            it.setOnDismissListener {
+                controller.stopAudio()
+                model.stopRecording()
+            }
+            refresh()
+        }
     }
 
-    fun dismiss() = dialog.dismiss()
+    fun dismiss() = dialog?.dismiss()
 
     fun refresh() {
         val recording = model.recording.value == true
         val stopping = model.stoppingRecording.value == true
-        status.text = model.status.value
-        record.text = if (recording) "Stop and save recording" else "Record voice sample"
-        record.isEnabled = !stopping
-        listenRingtone.isEnabled = !recording && !stopping
-        listenRecording.isEnabled = !recording && !stopping
-        upload.isEnabled = !recording && !stopping &&
-            com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null
-        generate.isEnabled = !recording && !stopping
+        val hasRecording = model.savedRecordingFile(contact).isFile
+        val signedIn = FirebaseAuth.getInstance().currentUser != null
+        val ringtonePlaying = audio.isActive && preview == Preview.RINGTONE
+        val recordingPlaying = audio.isActive && preview == Preview.RECORDING
+        if (recording) {
+            uploadId = null
+            uploadFailed = false
+        }
+        val uploadItem = model.items.value.orEmpty().firstOrNull { it.id == uploadId }
+        if (preparingUpload && uploadItem?.stage == "uploading") preparingUpload = false
+        val uploading = preparingUpload || (uploadId != null && uploadItem == null) || uploadItem?.stage == "uploading"
+        val uploaded = uploadItem?.stage == "uploaded"
+        val failed = uploadFailed || uploadItem?.stage == "failed"
+        binding.apply {
+            uploadProgress.visibility = if (uploading) View.VISIBLE else View.GONE
+            upload.setIconResource(when {
+                uploaded -> org.fossify.commons.R.drawable.ic_check_vector
+                failed -> android.R.drawable.ic_dialog_alert
+                else -> 0
+            })
+            upload.contentDescription = controller.getString(when {
+                uploading -> R.string.contact_audio_upload_in_progress
+                uploaded -> R.string.contact_audio_upload_complete
+                failed -> R.string.contact_audio_upload_failed
+                else -> R.string.contact_audio_upload
+            })
+            record.setText(when {
+                stopping -> R.string.contact_audio_saving
+                recording -> R.string.contact_audio_stop_recording
+                hasRecording -> R.string.contact_audio_record_again
+                else -> R.string.contact_audio_record
+            })
+            val summary = when {
+                stopping -> R.string.contact_audio_saving
+                recording -> R.string.contact_audio_recording_hint
+                !hasRecording -> R.string.contact_audio_no_sample
+                !signedIn -> R.string.contact_audio_upload_sign_in
+                else -> null
+            }
+            recordingSummary.visibility = if (summary == null) View.GONE else View.VISIBLE
+            summary?.let(recordingSummary::setText)
+            playRingtone.setText(if (ringtonePlaying) R.string.contact_audio_stop_ringtone else R.string.contact_audio_play_ringtone)
+            playRecording.setText(if (recordingPlaying) R.string.contact_audio_stop_playback else R.string.contact_audio_play_recording)
+            record.isEnabled = !stopping && !uploading
+            playRingtone.isEnabled = !recording && !stopping
+            playRecording.isEnabled = hasRecording && !recording && !stopping
+            upload.isEnabled = hasRecording && !recording && !stopping && signedIn && !uploading
+            updateActionColor(playRingtone, ringtonePlaying)
+            updateActionColor(playRecording, recordingPlaying)
+            updateActionColor(record, recording)
+            updateActionColor(upload, uploaded)
+            upload.iconTint = upload.textColors
+            uploadProgress.indeterminateTintList = ColorStateList.valueOf(controller.getProperPrimaryColor())
+        }
+    }
+
+    private fun updateActionColor(button: MaterialButton, active: Boolean = false) {
+        val textColor = controller.getProperTextColor()
+        val primaryColor = controller.getProperPrimaryColor()
+        button.isSelected = active
+        button.setTextColor(ColorStateList(
+            arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
+            intArrayOf(androidx.core.graphics.ColorUtils.setAlphaComponent(textColor, 97),
+                if (active) primaryColor else textColor)
+        ))
     }
 
     private fun requestRecording() {
@@ -77,11 +169,17 @@ internal class ContactRingtoneDialog(
             model.stopRecording()
             return
         }
-        val file = model.recordingFile(contact)
-        if (file.exists()) AlertDialog.Builder(controller.host)
-            .setMessage("Replace the saved voice recording for ${contact.name}?")
-            .setPositiveButton("Record") { _, _ -> controller.runAction(ScreenAction.RECORD) }
-            .setNegativeButton(R.string.cancel, null).showPhoneDialog()
-        else controller.runAction(ScreenAction.RECORD)
+        if (model.recordingFile(contact).exists()) {
+            ConfirmationDialog(
+                activity = controller.host,
+                message = controller.getString(R.string.contact_audio_replace, contact.name),
+                positive = R.string.contact_audio_confirm_record,
+                negative = R.string.cancel
+            ) {
+                controller.runAction(ScreenAction.RECORD)
+            }
+        } else {
+            controller.runAction(ScreenAction.RECORD)
+        }
     }
 }

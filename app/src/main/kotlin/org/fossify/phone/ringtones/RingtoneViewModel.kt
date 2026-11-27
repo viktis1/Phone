@@ -325,22 +325,33 @@ class RingtoneViewModel(application: Application) : AndroidViewModel(application
         recorder?.stop()
     }
 
-    fun uploadRecording() {
-        val contact = selectedContact ?: return
-        val uid = auth.currentUser?.uid ?: return
-        operation {
-            val original = recordingFile(contact)
-            check(original.isFile) { "Record a voice sample first." }
-            // Freeze the upload bytes so recording again cannot alter a queued upload.
-            val id = UUID.randomUUID().toString()
-            val snapshot = File(getApplication<Application>().noBackupFilesDir, "voice-uploads/${original.name.removeSuffix(".wav")}-$id.wav")
-            check(snapshot.parentFile!!.isDirectory || snapshot.parentFile!!.mkdirs())
-            original.copyTo(snapshot)
-            val item = RingtoneItem(id, uid, contact.lookupUri.toString(), contact.name,
-                "", "Voice recording", "", original.name, stage = "uploading", recordingPath = snapshot.absolutePath)
-            library.put(item)
-            RingtoneWork.enqueue(getApplication(), item)
-            status.postValue("Upload saved. Track it in History, then refresh voices in Generate after processing.")
+    fun uploadRecording(onQueued: (String?) -> Unit = {}) {
+        val contact = selectedContact ?: run { onQueued(null); return }
+        val uid = auth.currentUser?.uid ?: run { onQueued(null); return }
+        viewModelScope.launch {
+            var queuedId: String? = null
+            try {
+                withContext(Dispatchers.IO) {
+                    val original = savedRecordingFile(contact)
+                    check(original.isFile) { "Record a voice sample first." }
+                    // Freeze the upload bytes so recording again cannot alter a queued upload.
+                    val id = UUID.randomUUID().toString()
+                    val snapshot = File(getApplication<Application>().noBackupFilesDir,
+                        "voice-uploads/${original.name.removeSuffix(".wav")}-$id.wav")
+                    check(snapshot.parentFile!!.isDirectory || snapshot.parentFile!!.mkdirs())
+                    original.copyTo(snapshot)
+                    val item = RingtoneItem(id, uid, contact.lookupUri.toString(), contact.name,
+                        "", "Voice recording", "", original.name, stage = "uploading", recordingPath = snapshot.absolutePath)
+                    library.put(item)
+                    RingtoneWork.enqueue(getApplication(), item)
+                    status.postValue("Upload saved. Track it in History, then refresh voices in Generate after processing.")
+                    queuedId = id
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                status.value = e.message ?: "Operation failed."
+            }
+            onQueued(queuedId)
         }
     }
 
